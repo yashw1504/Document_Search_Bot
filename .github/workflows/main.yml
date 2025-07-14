@@ -1,0 +1,65 @@
+
+name: Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+#on:
+#  workflow_dispatch:
+#  workflow_call:
+  
+jobs:
+  Semgrep-Scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Login to docker hub
+      run: echo "${{ secrets.Docker_Password }}" | docker login -u "yash1526" --password-stdin
+
+    - name: Pull Semgrep Docker Image
+      run: |
+        docker pull returntocorp/semgrep
+        
+    - name: List vulnerable-source-code directory
+      run: ls -la 
+    - name: List all directories
+      run: find . -type d
+    
+    #- name: Semgrep Static Scan
+    #  run: |
+    #    pip install semgrep
+        #semgrep --config=auto --json --output=semgrep-fe-report.json .
+    - name: Perform Semgrep Analysis
+      run: |
+         docker run --rm -v $(pwd):/src returntocorp/semgrep semgrep scan \
+          --metrics=off \
+          --config "p/security-audit" \
+          --config "p/owasp-top-ten" \
+          --config "p/r2c" \
+          --config "p/typescript" \
+          --config "p/secrets" \
+          --config "p/xss" \
+          --config "p/nodejsscan" \
+          --config "p/insecure-transport" \
+          --config "p/javascript" \
+          --config "p/cwe-top-25" \
+          --config "p/sql-injection" \
+          --config "p/default" \
+          --json \
+          -o /src/semgrep-fe-report.json /src
+    - name: Convert JSON to HTML using semgrep2html
+      run: |
+        git clone https://github.com/lux10n/semgrep2html.git
+        cd semgrep2html
+        pip install jinja2
+        python3 parse-semgrep.py --input ../semgrep-fe-report.json --output ./semgrep-fe-report.html --project-name "Backend CI/CD"
+    - name: Upload Semgrep Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: semgrep-fe-report
+        path: ./semgrep2html/semgrep-fe-report.html
+    
